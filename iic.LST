@@ -1,0 +1,333 @@
+C51 COMPILER V9.00   IIC                                                                   10/20/2012 20:26:29 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE IIC
+OBJECT MODULE PLACED IN iic.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE iic.c OPTIMIZE(6,SPEED) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          
+   2          #include "main.h"
+   3          #include "incfile.h"
+   4          #include "iic.h"
+   5          //#define MS_DEBUG
+   6          #define IIC_USE_51
+   7          #define IIC_USE_TENX
+   8          
+   9          #if 1
+  10          sbit MS_SENSOR_SCK=P1^1;
+  11          sbit MS_SENSOR_SDA=P1^0;
+  12          
+  13          #define SET_I2C_CLK_OUTPUT      MS_SENSOR_SCK = 1
+  14          #define SET_I2C_CLK_HIGH        MS_SENSOR_SCK = 1 
+  15          #define SET_I2C_CLK_LOW         MS_SENSOR_SCK = 0
+  16          
+  17          #define SET_I2C_DATA_OUTPUT     MS_SENSOR_SDA = 1  
+  18          #define SET_I2C_DATA_INPUT      MS_SENSOR_SDA = 1
+  19          #define SET_I2C_DATA_HIGH       MS_SENSOR_SDA = 1
+  20          #define SET_I2C_DATA_LOW        MS_SENSOR_SDA = 0
+  21          #define GET_I2C_DATA_BIT        GPIO_READ()
+  22          #endif
+  23          
+  24          #if 0
+              #define SET_I2C_CLK_OUTPUT      SET_GPIO_PA5
+              #define SET_I2C_CLK_HIGH        SET_PA5 
+              #define SET_I2C_CLK_LOW         CLR_PA5
+              
+              #define SET_I2C_DATA_OUTPUT     SET_GPIO_PA4  
+              #define SET_I2C_DATA_INPUT      SET_PA4
+              #define SET_I2C_DATA_HIGH       SET_PA4
+              #define SET_I2C_DATA_LOW        CLR_PA4
+              #define GET_I2C_DATA_BIT        GPIO_READ()
+              #endif
+  35          
+  36          
+  37          #if 0
+              #define SET_I2C_CLK_OUTPUT      SET_GPIO_PB0
+              #define SET_I2C_CLK_HIGH        SET_PB0 
+              #define SET_I2C_CLK_LOW         CLR_PB0
+              
+              #define SET_I2C_DATA_OUTPUT     SET_GPIO_PB1  
+              #define SET_I2C_DATA_INPUT      SET_PB1
+              #define SET_I2C_DATA_HIGH       SET_PB1
+              #define SET_I2C_DATA_LOW        CLR_PB1
+              #define GET_I2C_DATA_BIT        GPIO_READ()
+              #endif
+  48          
+  49          
+  50          #define Delay20us               0//95
+  51          #define Delay10us       0//     45
+  52          #define Delay5us        0//     21
+  53          #define Delay2p5us              0//10
+  54          
+  55          
+C51 COMPILER V9.00   IIC                                                                   10/20/2012 20:26:29 PAGE 2   
+
+  56          static unsigned char GPIO_READ(void)
+  57          {
+  58   1      #if 0
+                      SET_PA4;//very important
+              #endif
+  61   1      
+  62   1      #if 0
+                      SET_PB1;//very important
+              
+                      if (REG1630_PB_GPIO_9B & 0x02) {
+                              return 1;
+                      }
+                      return 0;
+              
+              #endif
+  71   1      
+  72   1      #if 1
+  73   1      //       MS_SENSOR_SDA = 1;
+  74   1               if (MS_SENSOR_SDA == 1) {
+  75   2                      return 1;
+  76   2               }
+  77   1               return 0;
+  78   1      #endif  
+  79   1      }
+  80          
+  81          #if 0
+              static void GPIO_ModeSetup(bit gpio, char mode)
+              {
+                      ;
+              }
+              #endif
+  87          
+  88          static void mma_delay(unsigned char time)
+  89          {
+  90   1              unsigned char i;
+  91   1              for (i=0; i<time; i++);                //Software loop for time delay
+  92   1      }
+  93          
+  94          void IIC_Init(void)
+  95          {
+  96   1              //GPIO_ModeSetup(MS_SENSOR_SCK, 0x00);
+  97   1              SET_I2C_CLK_OUTPUT;
+  98   1      
+  99   1              SET_I2C_CLK_HIGH;
+ 100   1      
+ 101   1              //GPIO_ModeSetup(MS_SENSOR_SDA, 0x00);   //Set I2C DATA pin as GPIO
+ 102   1              SET_I2C_DATA_OUTPUT;
+ 103   1              SET_I2C_DATA_HIGH;
+ 104   1      }
+ 105          
+ 106          /**
+ 107          *  describe: I2C Start signal generation:
+ 108          *  Data pin falls down when clock is high
+ 109          */
+ 110          void IIC_Start(void)
+ 111          {
+ 112   1              //GPIO_ModeSetup(MS_SENSOR_SCK, 0x00);   //Set I2C CLK pin as GPIO
+ 113   1              SET_I2C_CLK_OUTPUT;                     //Set I2C CLK pin as output
+ 114   1              //GPIO_ModeSetup(MS_SENSOR_SDA, 0x00);   //Set I2C DATA pin as GPIO
+ 115   1              SET_I2C_DATA_OUTPUT;                    //Set I2C DATA pin as output
+ 116   1      
+ 117   1              SET_I2C_DATA_HIGH;                     //I2C DATA pin output high(1)
+C51 COMPILER V9.00   IIC                                                                   10/20/2012 20:26:29 PAGE 3   
+
+ 118   1              SET_I2C_CLK_HIGH;                     //I2C CLK pin output high(1)
+ 119   1              mma_delay(Delay20us);                   //Delay 20uS
+ 120   1              SET_I2C_DATA_LOW;                       //I2C DATA pin output low(0)
+ 121   1              mma_delay(Delay10us);                   //Delay 10uS
+ 122   1              SET_I2C_CLK_LOW;                        //I2C CLK pin output low(0)
+ 123   1              mma_delay(Delay10us);                   //Delay 10uS
+ 124   1      }
+ 125          
+ 126          void IIC_Stop (void)
+ 127          {
+ 128   1              mma_delay(Delay10us);                   //Delay 10uS
+ 129   1              SET_I2C_CLK_HIGH;                     //I2C CLK pin output high(1)
+ 130   1              mma_delay(Delay10us);                   //Delay 10uS
+ 131   1              SET_I2C_DATA_HIGH;                     //I2C DATA pin output high(1)
+ 132   1      }
+ 133          
+ 134          /**
+ 135          *  describe: I2C Repeat Start signal generation: 
+ 136          *  Data pin falls down when clock is high 
+ 137          *
+ 138          *
+ 139          *_________||||||||||||||____ SLK
+ 140          *
+ 141          *______|||||||||||||________ SDA
+ 142          *
+ 143          **/
+ 144          void IIC_RepeatedStart(void)
+ 145          {
+ 146   1              mma_delay(Delay20us);                   //Delay 20uS
+ 147   1              mma_delay(Delay20us);                   //Delay 20uS
+ 148   1              SET_I2C_DATA_HIGH;                     //I2C DATA pin output high(1)
+ 149   1              mma_delay(Delay10us);                   //Delay 10uS
+ 150   1              SET_I2C_CLK_HIGH;                     //I2C CLK pin output high(1)
+ 151   1              mma_delay(Delay20us);                   //Delay 20uS
+ 152   1              mma_delay(Delay20us);                   //Delay 20uS
+ 153   1              SET_I2C_DATA_LOW;                       //I2C DATA pin output low(0)
+ 154   1              mma_delay(Delay10us);                   //Delay 10uS
+ 155   1              SET_I2C_CLK_LOW;                        //I2C CLK pin output low(0)
+ 156   1              mma_delay(Delay10us);                   //Delay 10uS 
+ 157   1      }
+ 158          
+ 159          /**
+ 160           *
+ 161           * ____||||||____ SLK
+ 162           */
+ 163          void IIC_OneClk(void)
+ 164          {
+ 165   1              mma_delay(Delay5us);
+ 166   1              SET_I2C_CLK_HIGH;            //I2C CLK pin output high(1) 
+ 167   1              mma_delay(Delay10us);                  //Delay 10uS
+ 168   1              SET_I2C_CLK_LOW;                        //I2C CLK pin output low(0)
+ 169   1              mma_delay(Delay5us); 
+ 170   1      }
+ 171          
+ 172          
+ 173          /**
+ 174          *  Subroutine: Check I2C Acknowledgement signal
+ 175          *  return:   1 - Return 1 if read 1 from I2C DATA pin
+ 176          *            0 - Return 0 if read 0 from I2C DATA pin
+ 177          *            
+ 178          *
+ 179          * _________---------______________ sck
+C51 COMPILER V9.00   IIC                                                                   10/20/2012 20:26:29 PAGE 4   
+
+ 180          *
+ 181          * ---------_______________________sda
+ 182          *
+ 183          *
+ 184          **/
+ 185          unsigned char IIC_ChkAck(void)
+ 186          {
+ 187   1              SET_I2C_DATA_INPUT;                     //Set I2C DATA pin as input
+ 188   1              mma_delay(Delay5us);                    //Delay 5uS
+ 189   1              SET_I2C_CLK_HIGH;                     //I2C CLK pin output high(1) 
+ 190   1              mma_delay(Delay5us);                    //Delay 5uS again
+ 191   1              if (GET_I2C_DATA_BIT) {                 //Read I2C DATA pin
+ 192   2                      mma_delay(Delay5us);                  //Delay 5uS
+ 193   2                      SET_I2C_CLK_LOW;                      //I2C CLK pin output low(0)
+ 194   2                      mma_delay(Delay5us);                  //Delay 5us again
+ 195   2                      SET_I2C_DATA_OUTPUT;                  //Set I2C DATA pin as output
+ 196   2                      SET_I2C_DATA_LOW;                     //I2C DATA pin output low(0)
+ 197   2                      return 1;                             //Return 1 if read 1 from I2C DATA pin
+ 198   2              } else {                              //If I2C DATA pin is invalid for acknowledgement signal
+ 199   2                      mma_delay(Delay5us);                  //Delay 5uS
+ 200   2                      SET_I2C_CLK_LOW;                      //I2C CLK pin output low(0)
+ 201   2                      mma_delay(Delay5us);                  //Delay 5uS again
+ 202   2                      SET_I2C_DATA_OUTPUT;                  //Set I2C DATA pin as output
+ 203   2                      SET_I2C_DATA_LOW;                     //I2C DATA pin output low(0)
+ 204   2                      return 0;                             //Return 0 if read 0 from I2C DATA pin
+ 205   2              } 
+ 206   1      }
+ 207          
+ 208          /**
+ 209          * 
+ 210          *  Subroutine: Read one byte and send an acknowledgement signal
+ 211          *
+ 212          **/
+ 213          unsigned char IIC_ReadByteACK(void)
+ 214          {
+ 215   1              char i;
+ 216   1              unsigned char dat;
+ 217   1      
+ 218   1              SET_I2C_DATA_INPUT;                     //Set I2C DATA pin as input
+ 219   1              dat = 0;                               //Prepare to receive data
+ 220   1              for (i=7; i>=0; i--) {                  //Loop 8 times to receive 8 bits
+ 221   2                      if (GET_I2C_DATA_BIT) 
+ 222   2                              dat |= (0x01<<i);    //If read a 1, set to data bit
+ 223   2                      IIC_OneClk();
+ 224   2              }                                 //Output one clock pulse after a bit is read
+ 225   1      
+ 226   1              SET_I2C_DATA_OUTPUT;                    //Set I2C DATA pin as output
+ 227   1              SET_I2C_DATA_LOW;                       //I2C DATA pin output low(0): the acknowledgement signal
+ 228   1              IIC_OneClk();                           //Output one clock pulse after data pin is ready
+ 229   1      
+ 230   1              return dat;                            //Return eceived data
+ 231   1      }
+ 232          
+ 233          /*
+ 234           * Subroutine: Read one byte but do not send acknowledgement signal
+ 235           *
+ 236           **/
+ 237          unsigned char  IIC_ReadByteNCK(void)
+ 238          {
+ 239   1              char i;
+ 240   1              unsigned char dat;
+ 241   1      
+C51 COMPILER V9.00   IIC                                                                   10/20/2012 20:26:29 PAGE 5   
+
+ 242   1              SET_I2C_DATA_INPUT;                     //Set I2C DATA pin as input
+ 243   1              dat = 0;                               //Prepare to receive data
+ 244   1              for (i=7; i>=0; i--) {                  //Loop 8 times to receive 8 bits
+ 245   2                      if (GET_I2C_DATA_BIT) dat |= (0x01<<i);    //If read a 1, set to data bit
+ 246   2                      IIC_OneClk();
+ 247   2              }                                 //Output one clock pulse after a bit is read
+ 248   1      
+ 249   1              SET_I2C_DATA_OUTPUT;                    //Set I2C DATA pin as output
+ 250   1              SET_I2C_DATA_HIGH;                     //I2C DATA pin output high(1): no acknowledge
+ 251   1              IIC_OneClk();                           //Output one clock pulse after data pin is ready
+ 252   1              SET_I2C_DATA_LOW;                       //I2C DATA pin output low(0)
+ 253   1      
+ 254   1              return dat;                            //Return received data
+ 255   1      }
+ 256          
+ 257          /**
+ 258          *  Subroutine: I2C send one byte out
+ 259          *  
+ 260          *  
+ 261          *
+ 262          * _____|||||||______|||||||||_____ ....
+ 263          *
+ 264          *--<===========>--<==========> ........
+ 265          */
+ 266          void IIC_SendByte(unsigned char sData)
+ 267          {
+ 268   1              char i;
+ 269   1              for (i=7; i>=0; i--) {
+ 270   2                      if ((sData>>i)&0x01) {
+ 271   3                              SET_I2C_DATA_HIGH;
+ 272   3                      } else {
+ 273   3                              SET_I2C_DATA_LOW;
+ 274   3                      }
+ 275   2                      IIC_OneClk();
+ 276   2              } 
+ 277   1      }
+ 278          
+ 279          unsigned char IIC_SendBytes(kal_uint8 *pData, unsigned char len)
+ 280          {
+ 281   1              unsigned char i;
+ 282   1              for (i = 0; i < len; i++) {
+ 283   2                      IIC_SendByte(pData[i]);
+ 284   2                      if (IIC_ChkAck()) {
+ 285   3                              IIC_Stop();
+ 286   3                              return EEPROM_ACK_ERR;
+ 287   3                      }
+ 288   2              }
+ 289   1              return EEPROM_RDWR_OK; 
+ 290   1      }
+ 291          
+ 292          unsigned char IIC_ReadBytes(kal_uint8 *pData, unsigned char len)
+ 293          {
+ 294   1              unsigned char i;
+ 295   1              for(i=0; i<(len-1); i++)
+ 296   1                      pData[i] = IIC_ReadByteACK();
+ 297   1      
+ 298   1              pData[len-1] = IIC_ReadByteNCK();
+ 299   1              return 1; 
+ 300   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+C51 COMPILER V9.00   IIC                                                                   10/20/2012 20:26:29 PAGE 6   
+
+   CODE SIZE        =    438    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      10
+   IDATA SIZE       =   ----    ----
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

@@ -1,0 +1,9 @@
+"isr.obj",
+"main.obj",
+"STARTUP.obj",
+".\USBtran.OBJ",
+"iic.obj",
+"iicbridge.obj",
+"ds2460.obj" 
+TO "HID_RW64BYTES.omf" 
+RAMSIZE(256) 

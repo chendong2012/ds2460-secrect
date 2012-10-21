@@ -1,0 +1,370 @@
+C51 COMPILER V9.00   MAIN                                                                  10/20/2012 20:26:29 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE MAIN
+OBJECT MODULE PLACED IN main.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE main.c OPTIMIZE(6,SPEED) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          /***************************************************************************
+   2           *                                                                              *
+   3           * Copyright (c) 2006 tenx technology, Inc. All Rights Reserved.                        *       
+   4           *                                                                              *
+   5           ***************************************************************************/
+   6          
+   7          /****************************************************************************
+   8           *
+   9           * FILENAME
+  10           *      ISR.c
+  11           *
+  12           * VERSION
+  13           *      1.0
+  14           *
+  15           * DESCRIPTION
+  16           *      Tmu3112  AutoRun USB mass storage main program 
+  17           *
+  18           * DATA STRUCTURES
+  19           *      void initM51CtrlRegs(void)
+  20           *              
+  21           *
+  22           * FUNCTIONS
+  23           *              void usbInt0(void)
+  24           *              void Suspend(void)
+  25           *              void usbBusReset(void)
+  26           *              void Init_SPIB(void)
+  27           *              void ChangToFastMode(void)
+  28           *              void Init_SPIB(void)
+  29           *              void main(void)
+  30           *              void PollingUsbCommand(void)
+  31           *                      
+  32           *                              
+  33           * MACRO
+  34           *              none    
+  35           *
+  36           * HISTORY
+  37           *      07/07/06                 Ver 1.0 Modify by Johnny
+  38           *
+  39           * 
+  40           **************************************************************************/
+  41          
+  42          #define MAIN_C
+  43          //#define SPI
+  44          #include "incfile.h"
+  45          
+  46          #include "iicbridge.h"
+  47          #include "iic.h"
+  48          #include "DS2460.h"
+  49          sbit myp30=P3^0;
+  50          sbit myp31=P3^1;
+  51          sbit myp34=P3^4;
+  52          
+  53          
+  54          void initM51CtrlRegs(void)
+  55          {
+C51 COMPILER V9.00   MAIN                                                                  10/20/2012 20:26:29 PAGE 2   
+
+  56   1              IE = 0;
+  57   1              TMOD = 0x11;            // Set Timer 0 Timer1 to mode 1 
+  58   1              IT1 = 0;                // Low level trigger.
+  59   1              TH1 = (65536 - 450) / 256;
+  60   1              TL1 = (65536 - 450) % 256;
+  61   1              IP = 0x05;              // INT0/1 high priority.
+  62   1              IE = 0x85;              // INT0/1/ enable
+  63   1      }
+  64          void Delay800us()
+  65          {
+  66   1              unsigned char i;
+  67   1              for (i=0; i<255; i++);                //Software loop for time delay
+  68   1              for (i=0; i<255; i++);                //Software loop for time delay
+  69   1              for (i=0; i<255; i++);                //Software loop for time delay
+  70   1      
+  71   1      }
+  72          
+  73          //=============================================================================
+  74          // Function: void ChangToFastMode(void)
+  75          // Purpose: Use to in dual mode (RC mode / Fast mode) change tmu3112 clock to fast mode 
+  76          // Input:
+  77          // OutPut:
+  78          // Author: Johnny 06/28/2006
+  79          //=============================================================================
+  80          void ChangToFastMode(void)
+  81          { 
+  82   1              gfFastModeflag = 1;
+  83   1              SET_FCLK_EN; 
+  84   1              Delay800us();                   
+  85   1              ET1 = 1;                                                                        //enable Timer1 interrupt
+  86   1              TR1 = 1;                                                                        //timer1 start counter
+  87   1              SET_CKFAST;        
+  88   1      
+  89   1      } 
+  90                  
+  91          //==============================================================================
+  92          // Function: pollingUsbCommand(void)
+  93          // purpose: check & process USB Command
+  94          // Update:   2006/06/14 Johnny
+  95          //==============================================================================
+  96          void PollingUsbCommand(void)
+  97          {
+  98   1              usb_ds2460_loop();
+  99   1              /*use receive ep0 hid command from pc.this is Ep0Out()*/
+ 100   1              if(gfOut0Flag == 1) {
+ 101   2                      gfOut0Flag = 0;
+ 102   2                      Ep0Out();       
+ 103   2                      SET_OUT0_RDY; //YUAN
+ 104   2              }
+ 105   1      
+ 106   1              /*this is for usb setup communication*/
+ 107   1              if(gfRc0Flag == 1) {
+ 108   2                      gfRc0Flag = 0;
+ 109   2                      EP0SetupTask();
+ 110   2                      SET_OUT0_RDY; //YUAN
+ 111   2              } 
+ 112   1              
+ 113   1              /*this is for tx0 send finish, and this is for result report*/
+ 114   1              if(gfTx0Flag == 1) {
+ 115   2                      gfTx0Flag = 0;
+ 116   2                      /*why loadfifo:when need more 8bytes,need loadfifo and send to 
+ 117   2                      pc.*/
+C51 COMPILER V9.00   MAIN                                                                  10/20/2012 20:26:29 PAGE 3   
+
+ 118   2                      EP0_LoadFIFO();
+ 119   2                      SET_OUT0_RDY;
+ 120   2              }
+ 121   1              
+ 122   1              /*this is for suspend handle*/
+ 123   1              if(gfSuspend == 1) {
+ 124   2                      Suspend();
+ 125   2              }
+ 126   1      
+ 127   1              /*this is for 5v detect handle*/
+ 128   1              if(gf5VDDFlag == 1) {
+ 129   2                      gf5VDDFlag =0;
+ 130   2      
+ 131   2                      initM51CtrlRegs();
+ 132   2                      usbBusReset();  
+ 133   2              }
+ 134   1      
+ 135   1              /*this is for reset handle*/
+ 136   1              if(gfResetFlag == 1) {
+ 137   2                      gfResetFlag = 0;
+ 138   2                      usbBusReset();
+ 139   2              }
+ 140   1      
+ 141   1      }
+ 142          
+ 143          //==============================================================================
+ 144          // Function: USB_Resume(void)
+ 145          // purpose:  do TMU3112 resume  
+ 146          // Update:   2006/08/17 Johnny
+ 147          //==============================================================================
+ 148          
+ 149          void USB_Resume(void)
+ 150          {
+ 151   1              gfSuspend = 0;
+ 152   1              CLR_RESUME_INT;
+ 153   1              CLR_SUSPEND_INT;
+ 154   1              gbInt0IE |= (SETUP_IE | TX0_IE |TX1_IE|RC2_IE|RESET_IE|OUTI0_IE|TX1_IE|SUSPEND_IE); //enable EP0 SETUP,TX
+             -0_IE,RESET_IE
+ 155   1              gbInt1IE = (VDD5VRIE_INT|EXINT0IE|WKTUPIE);                                                     //Johnny 2006/08/17 add extern interrupt1
+ 156   1              CLR_SUSPEND_MODE;
+ 157   1              REG1630_INT0_ENA = gbInt0IE;
+ 158   1              REG1630_INT1_EN = gbInt1IE; //Johnny 06.12.04:add recover INT1 status
+ 159   1      
+ 160   1      
+ 161   1      //      REG1630_PC_GPIO_CON_AC = 0xf0;          //MUST SET PC0 HIGH FIRST
+ 162   1      //      REG1630_PC_GPIO_9C = 0x0f;                      //blue LED ON,POWER ON ,0xff  
+ 163   1              
+ 164   1      //      REG1630_PA_GPIO_9A = 0xf6;//0xff;8.9 PA4 =0, FOR SET USB VDD ON PA3 =1 CHARGE ENABLE
+ 165   1      //    Init_SPIB();
+ 166   1              REG1630_INT0A = 0;                                                                                      //clear interrupt 0
+ 167   1              REG1630_INT0B = 0;                                                                                      //clear interrupt 0
+ 168   1              REG1630_INT1 = 0;                                                                                       //clear interrupt 1
+ 169   1              REG1630_RC0 = 0;
+ 170   1              REG1630_TX0 = 0;
+ 171   1              REG1630_TX1 = 0;
+ 172   1              REG1630_RC2 = 0;
+ 173   1              REG1630_TX3     = 0;
+ 174   1              REG1630_RC4     = 0;
+ 175   1              REG1630_TX5     = 0;
+ 176   1              gfResume = 1;             
+ 177   1              
+ 178   1      }
+C51 COMPILER V9.00   MAIN                                                                  10/20/2012 20:26:29 PAGE 4   
+
+ 179          
+ 180          //==============================================================================
+ 181          // Function: Suspend(void)
+ 182          // purpose: let TMU3112 into suspend mode
+ 183          // Update:   2006/08/17 Johnny
+ 184          //==============================================================================
+ 185          void Suspend(void)                              
+ 186          {
+ 187   1      
+ 188   1              if(gfUSBInitEND ==1)            // 0319version
+ 189   1              {
+ 190   2      ////            REG1630_PB_GPIO_CON_AB = 0xff;//0xff;
+ 191   2      ////            REG1630_PB_GPIO_9B = 0x00;
+ 192   2      ////            REG1630_PC_GPIO_CON_AC = 0xf0;          //PC4,PC5->GPIO
+ 193   2      ////        REG1630_PWM_CTRL =0x00;        //close PWMA
+ 194   2      ////            REG1630_PC_GPIO_9C = 0x00;                      //0x08,EL OFF PC0= 0,SVDD=0,PC2=0 PC6=PC7=pc1=0 SAVE POWER
+ 195   2                      
+ 196   2      ////            REG1630_PA_GPIO_CON_AA = 0xff;          //zp 1029version, for PA5 -DP FLOATING
+ 197   2                      
+ 198   2      ////            REG1630_PA_GPIO_9A = 0x04;              //0xf6,PA3=0,DISABLE CHARGE
+ 199   2                      //P1=0x00;   //yuan add test            
+ 200   2      
+ 201   2                      gbInt0IE = (RESET_IE|RESUME_IE);
+ 202   2                      REG1630_INT0_ENA = gbInt0IE;
+ 203   2                      REG1630_INT1_EN = 0;                    // must be 0,if open wakeup,only sleep 0.5s.so  suspend clock stop.
+ 204   2                      
+ 205   2                      SET_SUSPEND_MODE; //force USB interface into suspend mode
+ 206   2      
+ 207   2                      SET_PWR_DN; //Into suspend mode
+ 208   2                      gfUSBInitEND = 0;
+ 209   2              }
+ 210   1      }
+ 211          
+ 212          //=============================================================================
+ 213          // Function: void usbBusReset(void)
+ 214          // Purpose: Reset USB Bus & clear some h/w register
+ 215          //                      need enable EP0 setup/Reset/Tx0 interrupt
+ 216          // Input:
+ 217          // OutPut:
+ 218          // Author: Johnny 07/28/2006
+ 219          //=============================================================================
+ 220          void usbBusReset(void)
+ 221          {
+ 222   1      //0x1f01
+ 223   1              REG1630_INT0A = 0;                                                                                      //clear interrupt 0
+ 224   1      //0x1f0b
+ 225   1              REG1630_INT0B = 0;                                                                                      //clear interrupt 0
+ 226   1      //above is usb interrupt register
+ 227   1      
+ 228   1      //0x1f81
+ 229   1              REG1630_INT1 = 0;                                                                                       //clear interrupt 1
+ 230   1      //above is 5v spi_slave uart wakeuptimer pc3~0 interrupte reg
+ 231   1      
+ 232   1      //0x1f03        
+ 233   1              REG1630_PWR_CTRL = 0;                                                                           //clear power control register
+ 234   1      
+ 235   1      //0x1f00
+ 236   1              REG1630_USB_ADDR = 0;                                                                           //clear usb device address
+ 237   1      
+ 238   1      //0x1f90
+ 239   1              REG1630_PWM_CTRL = 0;                                                                           //disable PWM function
+ 240   1      
+C51 COMPILER V9.00   MAIN                                                                  10/20/2012 20:26:29 PAGE 5   
+
+ 241   1      //0x1f04\5              
+ 242   1              REG1630_RC0 = 0;
+ 243   1              REG1630_TX0 = 0;
+ 244   1      
+ 245   1      //0x1f06
+ 246   1              REG1630_TX1 = 0;
+ 247   1      
+ 248   1      //0x1f07
+ 249   1              REG1630_RC2 = 0;
+ 250   1      
+ 251   1      //0x1f0d
+ 252   1              REG1630_TX3     = 0;
+ 253   1      
+ 254   1      //0x1f0e
+ 255   1              REG1630_RC4     = 0;
+ 256   1      
+ 257   1      //0x1f0a
+ 258   1              REG1630_TX5     = 0;
+ 259   1              
+ 260   1      
+ 261   1              byUSBAddr = 0;          //5-23
+ 262   1              gfSuspend = 0;
+ 263   1      
+ 264   1              gbInt0IE = (SETUP_IE | TX0_IE | TX1_IE | RC2_IE| RESET_IE | OUTI0_IE | SUSPEND_IE); //enable EP0 SETUP,TX
+             -0_IE,RESET_IE
+ 265   1              REG1630_INT0_ENA = gbInt0IE;
+ 266   1              gbInt1IE = (VDD5VRIE_INT);//|WKTUPIE);                                                  //Johnny 2006/08/17 add extern interrupt1
+ 267   1              REG1630_INT1_EN = gbInt1IE;                                                             //Johnny 2006/08/07 
+ 268   1      
+ 269   1              gfTx1RAMFlag =  USB_RAM0;                                                                       //init TX Ram flag to RAM0 use to write data tx to pc  
+ 270   1              SET_EP1_CFG;
+ 271   1              SET_RC2_CFG;
+ 272   1              SET_EP3_CFG;
+ 273   1      // assign xram1 xram2 to tx1 rc2
+ 274   1              REG1630_XRAM_CTRL = 0x60;
+ 275   1      
+ 276   1      ////    REG1630_PA_GPIO_9A &= 0xff;                                                                     //0xff set PA3 to high charge BAT
+ 277   1      
+ 278   1              gfFastModeflag = 0;                                                                                     //Johnny 2006/08/08
+ 279   1              gfFastModeflag =1;  //update by yuan 2008-11-14
+ 280   1              gbTimerCnt = 0;                                                                                         //Johnny 2006/08/08
+ 281   1              gfUSBInitEND = 0;       //????????                                                              //Johnny 2006/08/10 
+ 282   1              //Init_SPIB();
+ 283   1      //      gfFlashIDDataValid = 0; 
+ 284   1      //      gfFlashSTRDataValid = 0;
+ 285   1      //      ToDetectFlashValid();           // 1029version for serial no string
+ 286   1              gfUSEinitGetDescriptor = 0;     
+ 287   1      
+ 288   1              gfTestunitcnt = 0;                                                                                      //Johnny:test unit ready counter
+ 289   1      
+ 290   1              ucHIDstatus=0;
+ 291   1              gfEntryGetConfig=0;
+ 292   1      //      gfMSCPowerTest = 0;
+ 293   1      
+ 294   1      }  
+ 295          //-----------------------------------------------------
+ 296          //-----------------------------------------------------         
+ 297          void PowerOn_sub(void)
+ 298          {       
+ 299   1      ////    REG1630_PC_GPIO_CON_AC = 0xf0;          //MUST SET PC0 HIGH FIRST
+ 300   1      ////    REG1630_PC_GPIO_9C = 0x0f;                      //blue LED ON,POWER ON   PC6=PC7=0 SAVE POWER
+ 301   1      ////    REG1630_PA_GPIO_CON_AA = 0xff;          //PA=GPIO ,0xdf
+C51 COMPILER V9.00   MAIN                                                                  10/20/2012 20:26:29 PAGE 6   
+
+ 302   1      ////    REG1630_PA_GPIO_9A = 0xf6;                      //PA3 LOW,PA0 LOW,
+ 303   1              REG1630_INT0_ENA = gbInt0IE=0;                                  //disable all USB interrupt
+ 304   1              gbInt1IE =(VDD5VRIE_INT);//|WKTUPIE);           //enable 0.5s ,KEY,Touchpad interrupt
+ 305   1              REG1630_INT1_EN = gbInt1IE;             
+ 306   1      }
+ 307           sbit re=P1^0;
+ 308          //char code dx516[3] _at_ 0x003b;//注意在烧写到IC里，要把这句话去掉
+ 309          void main(void)
+ 310          {
+ 311   1              initM51CtrlRegs();                      
+ 312   1              ChangToFastMode();
+ 313   1              PowerOn_sub();
+ 314   1              usbBusReset();                          
+ 315   1              ET1 = 0;                                                        //disable timer0 intrrupt       
+ 316   1              TR1 = 0;                                                        //timer 0 stop                          
+ 317   1              gfFastModeflag = 1;
+ 318   1      //      ToDetectFlashValid();
+ 319   1              SET_VIO_50;
+ 320   1              IIC_Init();
+ 321   1              //         re = 1;
+ 322   1              //         re = 0;
+ 323   1              //         re = 1;
+ 324   1              //         re = 0;
+ 325   1              SET_GPIO_PC7;
+ 326   1              REG1630_PB_GPIO_CON_AB = 0xff;
+ 327   1              REG1630_PB_GPIO_9B = 0xff;
+ 328   1      
+ 329   1      //CLR_PC3;
+ 330   1      
+ 331   1              while(REG1630_USB_PLUG_OUT & VDD5V_EXIST_FLG)
+ 332   1              {
+ 333   2                      PollingUsbCommand();
+ 334   2              }
+ 335   1      }
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    430    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =     18    ----
+   IDATA SIZE       =      1    ----
+   BIT SIZE         =      5    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

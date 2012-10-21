@@ -1,0 +1,287 @@
+C51 COMPILER V9.00   DS2460                                                                10/20/2012 20:26:30 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE DS2460
+OBJECT MODULE PLACED IN ds2460.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE ds2460.c OPTIMIZE(6,SPEED) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          #include "ds2460.h"
+   2          #include "iic.h"
+   3          /////////////////////////////////////
+   4          #define DS2460_ADDR 0x80
+   5          
+   6          static unsigned char I2CBus_write(unsigned char *txBytes, unsigned char len);
+   7          static unsigned char I2CBus_packetRead(unsigned char memAddr, unsigned char *rxBytes, unsigned char len);
+   8          static unsigned char I2CBus_packetWrite(unsigned char memAddr, unsigned char *buffer, unsigned char len);
+   9          static unsigned char send_header(unsigned char memAddr);
+  10          
+  11          static void msDelay(unsigned char ti)
+  12          {
+  13   1              unsigned char i,j;
+  14   1              for (i=0; i < 255; i++) {
+  15   2                      for (j = 0; j < ti; j++);
+  16   2              }
+  17   1      }
+  18          
+  19          unsigned char DS2460_ReadSerialNumber(unsigned char* buffer, unsigned char len)
+  20          {
+  21   1         return I2CBus_packetRead(DS2460_MEM_SERIAL, buffer, len);
+  22   1      }
+  23          
+  24          unsigned char DS2460_WriteInputSHA(unsigned char *buffer, unsigned char len)
+  25          {
+  26   1         return I2CBus_packetWrite(DS2460_MEM_SHA, buffer, len);
+  27   1      }
+  28          
+  29          
+  30          unsigned char DS2460_ReadInputSHA(unsigned char* buffer, unsigned char len)
+  31          {
+  32   1         return I2CBus_packetRead(DS2460_MEM_SHA, buffer, len);
+  33   1      }
+  34          
+  35          unsigned char DS2460_ReadEeprom(unsigned char addr, unsigned char* buffer, unsigned char len)
+  36          {
+  37   1              if (addr < 0x80 || addr > 0xef || (addr+len) > 0xf0) {
+  38   2                      return 0;
+  39   2              }
+  40   1      /*
+  41   1              if (addr & 0x07) {
+  42   1                      return 0;
+  43   1              }
+  44   1      */
+  45   1         return I2CBus_packetRead(addr, buffer, len);
+  46   1      }
+  47          
+  48          
+  49          
+  50          
+  51          // gpSHA - 0 for dallas SHA or 1 for general purpose SHA
+  52          // srcSecret - 0, 1, 2, or 3 for SSecret, ESecret1, ESecret2, or ESecret3
+  53          // toMACBuffer - 0 to put MAC in SSecret or 1 to put MAC in buffer
+  54          unsigned char DS2460_ComputeSHA(unsigned char gpSHA, unsigned char srcSecret, unsigned char toMACBuffer)
+  55          {
+C51 COMPILER V9.00   DS2460                                                                10/20/2012 20:26:30 PAGE 2   
+
+  56   1         unsigned char success = 0;
+  57   1         // address for command buffer, compute command
+  58   1         unsigned char buffer[] = {DS2460_MEM_CMD, DS2460_CMD_COMPUTE};
+  59   1         //printf("Compute SHA: gpSHA=%01X, srcSecret=%01X, toMACBuffer=%01X\n",
+  60   1         //   (int)gpSHA, (int)srcSecret, (int)toMACBuffer);
+  61   1         if(gpSHA)
+  62   1            buffer[1] |= 0x20;
+  63   1         buffer[1] |= (srcSecret<<3);
+  64   1         if(toMACBuffer)
+  65   1            buffer[1] |= 0x04;
+  66   1         // **** **** **** **** **** **** **** **** **** **** **** **** **** 
+  67   1         // bug fix in emulator (used 0x02 instead of 0x04 for output to MAC)
+  68   1      //   if(toMACBuffer)
+  69   1      //      buffer[1] |= 0x02;
+  70   1         // **** **** **** **** **** **** **** **** **** **** **** **** **** 
+  71   1         success = I2CBus_write(buffer, 2);
+  72   1         msDelay(100);
+  73   1         return success;
+  74   1      }
+  75          
+  76          unsigned char DS2460_MatchMAC(unsigned char* buffer, unsigned char len)
+  77          {
+  78   1         return I2CBus_packetWrite(DS2460_MEM_MATCHMAC, buffer, len);
+  79   1      }
+  80          
+  81          unsigned char DS2460_ReadMAC(unsigned char* buffer, unsigned char len)
+  82          {
+  83   1         return I2CBus_packetRead(DS2460_MEM_MAC, buffer, len);
+  84   1      }
+  85          /*
+  86          unsigned char DS2460_WriteMAC(unsigned char* buffer, unsigned char len)
+  87          {
+  88             return I2CBus_packetWrite(DS2460_MEM_MAC, buffer, len);
+  89          }
+  90          */
+  91          // dstSecret - 1, 2, or 3 for ESecret1, ESecret2, or ESecret3
+  92          unsigned char DS2460_TransferSecret(unsigned char dstSecret)
+  93          {
+  94   1         unsigned char success = 1;
+  95   1         // address for command buffer, transfer command
+  96   1         unsigned char buffer[] = {DS2460_MEM_CMD, DS2460_CMD_TXSECRET};
+  97   1         buffer[1] |= (dstSecret<<4);
+  98   1         success = I2CBus_write(buffer, 2);
+  99   1         msDelay(100);
+ 100   1         return success;
+ 101   1      }
+ 102          
+ 103          unsigned char DS2460_WriteSSecret(unsigned char* buffer, unsigned char len)
+ 104          {
+ 105   1         return I2CBus_packetWrite(DS2460_MEM_SSECRET, buffer, len);
+ 106   1      }
+ 107          
+ 108          unsigned char DS2460_WriteESecret1(unsigned char* buffer, unsigned char len)
+ 109          {
+ 110   1         return I2CBus_packetWrite(DS2460_MEM_ESECRET1, buffer, len);
+ 111   1      }
+ 112          
+ 113          unsigned char DS2460_WriteESecret2(unsigned char* buffer, unsigned char len)
+ 114          {
+ 115   1         return I2CBus_packetWrite(DS2460_MEM_ESECRET2, buffer, len);
+ 116   1      }
+ 117          
+C51 COMPILER V9.00   DS2460                                                                10/20/2012 20:26:30 PAGE 3   
+
+ 118          unsigned char DS2460_WriteESecret3(unsigned char* buffer, unsigned char len)
+ 119          {
+ 120   1         return I2CBus_packetWrite(DS2460_MEM_ESECRET3, buffer, len);
+ 121   1      }
+ 122          
+ 123          /*addr 不能大于EF*/
+ 124          unsigned char DS2460_WriteEEPROM(unsigned char addr, unsigned char* buffer, unsigned char len)
+ 125          {
+ 126   1              if (addr < 0x80 || addr > 0xef || (addr+len) > 0xf0) {
+ 127   2                      return 0;
+ 128   2              }
+ 129   1      /*
+ 130   1              if (addr & 0x07) {
+ 131   1                      return 0;
+ 132   1              }
+ 133   1      */
+ 134   1              return I2CBus_packetWrite(addr, buffer, len);
+ 135   1      }
+ 136          
+ 137          /*
+ 138          把MAC读出来，然后再写到SHA输入缓冲里去，进行一下步的运算
+ 139          */
+ 140          unsigned char DS2460_WriteInputSHA_Custom(unsigned char* buffer)
+ 141          {
+ 142   1              idata char buf[64];
+ 143   1              unsigned char ret=0;
+ 144   1              unsigned char i=0;
+ 145   1              for (i = 0; i < 64; i++) {
+ 146   2                      buf[i] = 0;
+ 147   2              }
+ 148   1      
+ 149   1              for (i = 0; i < buffer[0]; i++) {
+ 150   2                      buf[i] = buffer[i+1];
+ 151   2              }
+ 152   1      
+ 153   1              ret = DS2460_ReadMAC(buf, 20);  
+ 154   1              if (ret == 1) {
+ 155   2                      return DS2460_WriteInputSHA(buf, 64);
+ 156   2              } else {
+ 157   2                      return 0;       
+ 158   2              }
+ 159   1      }
+ 160          
+ 161          /////////////////////////////////////////////////////////////////////////////////////////////
+ 162          /*
+ 163          *desc: write device address and register addr(8 bits addr or 16 bits addr)
+ 164          *
+ 165          *0.send start iic flag
+ 166          *1.send device address to iic device
+ 167          *2.send device register address
+ 168          *3.if transfer success will not issue stop command
+ 169          */
+ 170          static unsigned char send_header(unsigned char memAddr)
+ 171          {
+ 172   1              IIC_Start();
+ 173   1      
+ 174   1              /*send device address to iic device*/
+ 175   1              IIC_SendByte(DS2460_ADDR);
+ 176   1      
+ 177   1              if (IIC_ChkAck())
+ 178   1                      goto err1;
+ 179   1      
+C51 COMPILER V9.00   DS2460                                                                10/20/2012 20:26:30 PAGE 4   
+
+ 180   1              /*send device register address*/
+ 181   1              IIC_SendByte(memAddr);//low 8 bits
+ 182   1              if (IIC_ChkAck())
+ 183   1                      goto err1;
+ 184   1              return EEPROM_RDWR_OK;
+ 185   1      
+ 186   1      err1:
+ 187   1              IIC_Stop();
+ 188   1              return EEPROM_ACK_ERR;  
+ 189   1      }
+ 190          
+ 191          static unsigned char I2CBus_packetWrite(unsigned char memAddr, unsigned char *buffer, unsigned char len)
+ 192          {
+ 193   1              send_header(memAddr);
+ 194   1      
+ 195   1      //send buffer content
+ 196   1              if (IIC_SendBytes(buffer, len) == EEPROM_ACK_ERR)
+ 197   1                      return EEPROM_ACK_ERR;
+ 198   1      //ok
+ 199   1              IIC_Stop();
+ 200   1              msDelay(10);
+ 201   1              return EEPROM_RDWR_OK;
+ 202   1      }
+ 203          
+ 204          static unsigned char I2CBus_packetRead(unsigned char memAddr, unsigned char *rxBytes, unsigned char len)
+ 205          {
+ 206   1              /*send register addr to device*/
+ 207   1              send_header(memAddr);
+ 208   1      
+ 209   1              // Repeated Start
+ 210   1              IIC_RepeatedStart();
+ 211   1      
+ 212   1              // Device hardware address
+ 213   1              IIC_SendByte(DS2460_ADDR | 0x01);
+ 214   1              if (IIC_ChkAck()) {
+ 215   2                      IIC_Stop();
+ 216   2                      return EEPROM_ACK_ERR;
+ 217   2              }
+ 218   1      
+ 219   1              if (IIC_ReadBytes(rxBytes, len) == EEPROM_ACK_ERR)
+ 220   1                      return EEPROM_ACK_ERR;
+ 221   1              //ok
+ 222   1              IIC_Stop();
+ 223   1              msDelay(1);
+ 224   1              return EEPROM_RDWR_OK;
+ 225   1      }
+ 226          
+ 227          /*
+ 228           *only send txBytes Buffer datas into device.
+ 229           *send start-->device address --> send txBytes-->stop
+ 230           *
+ 231           */
+ 232          static unsigned char I2CBus_write(unsigned char* txBytes, unsigned char len)
+ 233          {
+ 234   1      
+ 235   1              IIC_Start();
+ 236   1      
+ 237   1              /*send device address to iic device*/
+ 238   1              IIC_SendByte(DS2460_ADDR);
+ 239   1      
+ 240   1              if (IIC_ChkAck()) {
+ 241   2                      IIC_Stop();
+C51 COMPILER V9.00   DS2460                                                                10/20/2012 20:26:30 PAGE 5   
+
+ 242   2                      return EEPROM_ACK_ERR;
+ 243   2              }
+ 244   1      
+ 245   1              if (IIC_SendBytes(txBytes, len) == EEPROM_ACK_ERR)
+ 246   1                      return EEPROM_ACK_ERR;
+ 247   1              IIC_Stop();
+ 248   1              msDelay(2);
+ 249   1              return EEPROM_RDWR_OK;
+ 250   1      }
+ 251          
+ 252          
+ 253          
+ 254          
+ 255          
+ 256          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    562    ----
+   CONSTANT SIZE    =      4    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =   ----      36
+   IDATA SIZE       =   ----      64
+   BIT SIZE         =   ----    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)

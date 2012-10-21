@@ -1,0 +1,283 @@
+C51 COMPILER V9.00   ISR                                                                   10/20/2012 20:26:28 PAGE 1   
+
+
+C51 COMPILER V9.00, COMPILATION OF MODULE ISR
+OBJECT MODULE PLACED IN isr.OBJ
+COMPILER INVOKED BY: C:\Keil\C51\BIN\C51.EXE isr.c OPTIMIZE(6,SPEED) BROWSE DEBUG OBJECTEXTEND
+
+line level    source
+
+   1          
+   2          
+   3          /***************************************************************************
+   4           *                                                                              *
+   5           * Copyright (c) 2006 tenx technology, Inc. All Rights Reserved.                        *       
+   6           *                                                                              *
+   7           ***************************************************************************/
+   8          
+   9          /****************************************************************************
+  10           *
+  11           * FILENAME
+  12           *      ISR.c
+  13           *
+  14           * VERSION
+  15           *      1.0
+  16           *
+  17           * DESCRIPTION
+  18           *      Handle tmu3112  inrrupt service routine. 
+  19           *
+  20           * DATA STRUCTURES
+  21           *      None
+  22           *
+  23           * FUNCTIONS
+  24           *              void usbInt0(void)
+  25           *              void USB_Timer1(void)
+  26           *              void usbInt1(void)
+  27           *              
+  28           *                              
+  29           * MACRO
+  30           *              none    
+  31           *
+  32           * HISTORY
+  33           *      07/07/06                 Ver 1.0 Modify by Johnny
+  34           *
+  35           * 
+  36           **************************************************************************/
+  37          
+  38          
+  39          
+  40          #define _ISR_C
+  41          #include "incfile.h"
+  42          
+  43          //=============================================================================
+  44          // Function: void usbInt0(void)
+  45          // Purpose: Interrupt 0 service routin
+  46          // Input:
+  47          // OutPut:
+  48          // Author: Johnny 06/15/2006
+  49          //=============================================================================
+  50          extern unsigned char g_action;
+  51          void usbInt0(void) interrupt 0  using 3
+  52          {       
+  53   1              byInt0StatusA = REG1630_INT0A; 
+  54   1              byInt0StatusB = REG1630_INT0B;
+  55   1      
+C51 COMPILER V9.00   ISR                                                                   10/20/2012 20:26:28 PAGE 2   
+
+  56   1              /*a usb packet finished clear to 0 rdy*/
+  57   1              /*表示当USB主机取走ep3的数据后，会SIE引发CPU中断到这里
+  58   1              表示EP3的数据已取走*/
+  59   1              if(byInt0StatusB & TX3_INT){
+  60   2                      CLR_TX3_RDY;
+  61   2                      CLR_TX3_INT;
+  62   2                      gfInterrptXferDone = 1;
+  63   2                      g_action = 0;
+  64   2              } 
+  65   1      
+  66   1              /*no handle*/
+  67   1              if(byInt0StatusB & TX5_INT){
+  68   2                      CLR_TX5_INT;
+  69   2              }
+  70   1              
+  71   1              /*reveive a packet of rc4 from pc*/
+  72   1              if(byInt0StatusB & RC4_INT){
+  73   2                      CLR_RC4_INT;//now cannot receive packet from rc4
+  74   2                      g_action = 1;//indicate pc send data to xramb ok
+  75   2              }
+  76   1      
+  77   1              /*no use*/      
+  78   1              if(byInt0StatusA & TX1_INT){
+  79   2                      CLR_TX1_INT;                                            //clear TX1_INT
+  80   2                      CLR_TX1_RDY;
+  81   2                      gfTx1Flag = 1;
+  82   2                      gfBulkXferDone = 1;//this flasg for bulk xfer use in Read flash data
+  83   2      //              return;
+  84   2              }       
+  85   1              
+  86   1              if(byInt0StatusA & RC2_INT){
+  87   2                      CLR_RC2_INT;//clear RC2I interrupt
+  88   2                      gfRC2Flag = 1;
+  89   2                      //return;
+  90   2              } 
+  91   1      
+  92   1              if(byInt0StatusA & RESET_INT){//USB bus reset
+  93   2                      CLR_RESET_INT;//clear Reset interrupt
+  94   2                      gfResetFlag = 1;
+  95   2                      return;
+  96   2              } 
+  97   1      
+  98   1              if(byInt0StatusA & SUSPEND_INT){
+  99   2      
+ 100   2                      CLR_SUSPEND_INT;//clear suspend interrupt
+ 101   2                      gfSuspend = 1;   
+ 102   2                      return;
+ 103   2              }
+ 104   1      
+ 105   1              if(byInt0StatusA & RESUME_INT){
+ 106   2                      CLR_RESUME_INT;//clear resume interrupt
+ 107   2                      USB_Resume();
+ 108   2                      return;
+ 109   2              } 
+ 110   1      
+ 111   1              if(byInt0StatusA & SETUP_INT){//detect setup int
+ 112   2                      gbInt0IE |=  SUSPEND_IE;                        
+ 113   2                      REG1630_INT0_ENA = gbInt0IE;
+ 114   2                      CLR_SETUP_INT;//clear setup interrupt
+ 115   2                      CLR_OUTI0_INT;//clear OUT0_RDY
+ 116   2                      gfRc0Flag = 1;
+ 117   2                      return;
+C51 COMPILER V9.00   ISR                                                                   10/20/2012 20:26:28 PAGE 3   
+
+ 118   2              }
+ 119   1      
+ 120   1              if(byInt0StatusA & TX0_INT){//TX0 interrupt
+ 121   2                      CLR_TX0_INT;//write 0 to clear TX0_INT
+ 122   2                      CLR_TX0_RDY;//clear TX0_RDY
+ 123   2                      bEP0xferDone = 0;//clear TX0 transmit flag in EP0_LoadFIFO funciton
+ 124   2                      if(gfSetAddress){       
+ 125   3                              REG1630_USB_ADDR =  gbUsbAddr;//gbUsbAddr is stored the address in the last set address Setup.
+ 126   3                              gfSetAddress = 0;
+ 127   3                              SET_OUT0_RDY;//set OUT0 ready for receive OUT
+ 128   3                              return;
+ 129   3                      } else {
+ 130   3                              gfTx0Flag = 1;  
+ 131   3                              return;
+ 132   3                      }
+ 133   2                      return;
+ 134   2              }
+ 135   1      
+ 136   1              if(byInt0StatusA & OUTI0_INT){
+ 137   2                      XmtBuff.bLength = 0;
+ 138   2                      gfOut0Flag = 1;
+ 139   2                      if(DATA1_ZERO_LENGTH){//进入状态阶段,收到为datq1，长度为0，那么为状态阶段
+ 140   3                              CLR_TX0_INT;
+ 141   3                              REG1630_TX0 = 0;
+ 142   3                              XmtBuff.bLength = 0;
+ 143   3                      }
+ 144   2                      CLR_OUTI0_INT;//clear OUTI0_INT
+ 145   2                      CLR_OUT0_RDY;//clear OUT0_RDY
+ 146   2                      return;
+ 147   2              }       
+ 148   1      }
+ 149          
+ 150          //=============================================================================
+ 151          // Function: void usbInt1(void)
+ 152          // Purpose: Interrupt 2 service routin,the interrupt source is external interrup
+ 153          // Input:
+ 154          // OutPut:
+ 155          // Author: Johnny 06/15/2006
+ 156          //=============================================================================
+ 157          void usbInt1(void) interrupt 2 using 1
+ 158          {
+ 159   1      
+ 160   1              byInt1Status =  REG1630_INT1;
+ 161   1      //      if(gb_ucPowerDownMode) 
+ 162   1      //      {gb_ucPowerDownMode =gb_ucPowerDownMode|byInt1Status;}
+ 163   1      
+ 164   1              if(byInt1Status&WKTUPI_INT)
+ 165   1              {
+ 166   2                      CLR_WKTUPI_INT;
+ 167   2               
+ 168   2              }
+ 169   1              
+ 170   1              if(byInt1Status & VDD5VRI_INT)                                                  //if 5V exist is flag will be true
+ 171   1              {
+ 172   2                      CLR_VDD5VRI_INT;
+ 173   2                      gf5VDDFlag = 1;
+ 174   2                      
+ 175   2              }
+ 176   1              if(byInt1Status & EXINT0I_INT)                                                  //this interrup use to UART test when this interrup issue set the gl
+             -oble flag to stop UART_RX
+ 177   1              {
+ 178   2                      CLR_EXINT0I_INT;        
+C51 COMPILER V9.00   ISR                                                                   10/20/2012 20:26:28 PAGE 4   
+
+ 179   2              //      gfUARTRCstop = 1;
+ 180   2      
+ 181   2                      
+ 182   2              }
+ 183   1              if(byInt1Status & EXINT1I_INT)                                                  //this interrup use to UART test when this interrup issue set the gl
+             -oble flag to stop UART_RX
+ 184   1              {
+ 185   2                      CLR_EXINT1I_INT;        
+ 186   2                      
+ 187   2              }
+ 188   1              if(byInt1Status & EXINT3I_INT)                  //zp
+ 189   1              {
+ 190   2                      CLR_EXINT3I_INT;        
+ 191   2                      //gb_ucPWRDNCnt = 0;                            //press any key,will display 1minutes
+ 192   2                                      
+ 193   2              }
+ 194   1              if(byInt1Status & EXINT2I_INT)                  //zp
+ 195   1              {
+ 196   2                      CLR_EXINT2I_INT;        
+ 197   2                      //gb_ucPWRDNCnt = 0;                            //press touchpad,will display 1minutes
+ 198   2              }
+ 199   1      }
+ 200          
+ 201          //=============================================================================
+ 202          // Function: void USB_Timer1(void)
+ 203          // Purpose: Interrupt 3 service routin,the interrupt source is Timer1 interrup
+ 204          // Input:
+ 205          // OutPut:
+ 206          // Author: Johnny 08/15/2006
+ 207          //=============================================================================
+ 208          
+ 209          void USB_Timer1(void) interrupt 3 using 2       
+ 210          {
+ 211   1              TR1 = 0;
+ 212   1      //      if(gfFastModeflag || gbModeKey==0 )
+ 213   1              if(gfFastModeflag)
+ 214   1              {       
+ 215   2                      TH1 = (65536 - 40000) / 256;                                            //set timer 20 ms
+ 216   2                      TL1 = (65536 - 40000) % 256;                                            //set timer 20 ms
+ 217   2                      if(gfUSBInitEND==0 )
+ 218   2                      {
+ 219   3      //                      gfTimeoutflag=0;                                                         
+ 220   3                              return; 
+ 221   3                      } 
+ 222   2                      if(gfUSBInitEND)
+ 223   2                      {
+ 224   3                              gbTimerCnt++;
+ 225   3                              if(gbTimerCnt == 0x25)
+ 226   3                              {                               
+ 227   4                      //              gfSCSICmdStatus = SCSI_STATUS_MEDIA_CHANGE;     
+ 228   4                                      gbTimerCnt = 0;
+ 229   4                                      
+ 230   4                              }
+ 231   3                              TR1 = 1;                                                                                //start timer1          
+ 232   3                              return;
+ 233   3                      }
+ 234   2                      return;                         
+ 235   2              }else
+ 236   1              {
+ 237   2                      TH1 = (65536 - 450) / 256;                                                      //set timer 900us
+ 238   2                      TL1 = (65536 - 450) % 256;                                                      //set timer 900us
+ 239   2                      gbTimerCnt++;
+C51 COMPILER V9.00   ISR                                                                   10/20/2012 20:26:28 PAGE 5   
+
+ 240   2                      TR1 = 1;                                                                                        //start timer1  
+ 241   2                              
+ 242   2                      return;
+ 243   2              }
+ 244   1      
+ 245   1      }
+ 246          
+ 247          
+ 248          
+ 249          
+ 250          
+
+
+MODULE INFORMATION:   STATIC OVERLAYABLE
+   CODE SIZE        =    444    ----
+   CONSTANT SIZE    =   ----    ----
+   XDATA SIZE       =   ----    ----
+   PDATA SIZE       =   ----    ----
+   DATA SIZE        =      3    ----
+   IDATA SIZE       =      1    ----
+   BIT SIZE         =     12    ----
+END OF MODULE INFORMATION.
+
+
+C51 COMPILATION COMPLETE.  0 WARNING(S),  0 ERROR(S)
